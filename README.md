@@ -1,6 +1,7 @@
 # Agent Supply Trust API
 
-Evaluate packages, containers, MCP servers, agent skills and plugins for provenance, permissions and runtime risk.
+Evaluate packages, containers, MCP servers, agent skills and plugins for
+provenance, permissions and runtime risk.
 
 - [Product and pricing](https://agentsupplytrust-api.com/?utm_source=github&utm_medium=developer&utm_campaign=agent-supply-trust-github&utm_content=readme#pricing)
 - [Developer documentation](https://agentsupplytrust-api.com/docs?utm_source=github&utm_medium=developer&utm_campaign=agent-supply-trust-github&utm_content=readme)
@@ -8,55 +9,100 @@ Evaluate packages, containers, MCP servers, agent skills and plugins for provena
 - [OpenAPI contract](https://agentsupplytrust-api.com/openapi.json)
 - [Postman collection](./postman_collection.json)
 
-## Quickstart
+## Quickstart: inspect an agent component without an account
 
-### 1. Request a free-key verification email
+The public demo statically analyzes the supplied metadata with the production
+scanner and policy engine. It never installs or executes the component.
 
 ```bash
-curl -X POST https://agentsupplytrust-api.com/v1/keys \
+curl -sS -X POST https://agentsupplytrust-api.com/v1/demo/scan \
   -H 'content-type: application/json' \
-  -d '{"email":"you@example.com","source":{"source":"github","medium":"developer","campaign":"agent-supply-trust-github","content":"readme"}}'
+  -d '{"kind":"mcp_server","name":"acme-mcp","version":"2.1.0","provenance":{"signed":true,"publisherVerified":true,"sourceRepo":"https://github.com/acme/mcp"},"permissions":["tool.invoke"]}'
 ```
 
-The service returns `202 Accepted` and sends a one-time claim link. Follow the
-email, or exchange its token with `POST /v1/keys/claim`. The API key is shown
-once after verification; store it securely. No card is required for the free
-sandbox. Current free allowance: **100 component scans/month**.
+The response explains the policy decision and quotes the observed evidence:
 
-### 2. Make the first product call
+```json
+{
+  "verdict": {
+    "decision": "allow",
+    "reasons": [],
+    "policyVersion": "default-v1",
+    "componentDigest": "sha256:30c6a33c07624b0d65e26610f34752553d12ae5355154fb089d94e1223a8c448",
+    "riskScore": 0
+  },
+  "scan": {
+    "riskScore": 0,
+    "severityCounts": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+    "findings": []
+  },
+  "requestId": "req_example"
+}
+```
+
+That is the first useful result: `verdict.decision` is the enforcement answer;
+`scan.findings` provides the auditable reasons and exact observed evidence.
+
+## Create and use a free API key
 
 ```bash
-curl -X POST https://agentsupplytrust-api.com/v1/scans \
+curl -sS -X POST https://agentsupplytrust-api.com/v1/keys \
+  -H 'content-type: application/json' \
+  -d '{"email":"you@example.com","source":{"source":"github","medium":"developer","campaign":"agent-supply-trust-github","content":"readme"}}'
+
+curl -sS -X POST https://agentsupplytrust-api.com/v1/keys/claim \
+  -H 'content-type: application/json' \
+  -d '{"token":"PASTE_ONE_TIME_TOKEN_FROM_EMAIL"}'
+
+export KEY='PASTE_API_KEY_FROM_CLAIM_RESPONSE'
+```
+
+Ask for an authenticated, auditable policy verdict:
+
+```bash
+curl -sS -X POST https://agentsupplytrust-api.com/v1/verdicts \
   -H "Authorization: Bearer $KEY" \
   -H 'content-type: application/json' \
-  -d '{"components":[{"kind":"mcp_server","name":"acme-mcp","version":"1.4.0"}]}'
+  -d '{"component":{"kind":"mcp_server","name":"acme-mcp","version":"2.1.0","provenance":{"signed":true,"publisherVerified":true,"sourceRepo":"https://github.com/acme/mcp"},"permissions":["tool.invoke"]}}'
 ```
 
 ## SDKs
 
-The repository includes dependency-light client files that point to the current
-contract and canonical product domain:
-
-- [Python SDK](./sdk/python/supply_chain_trust.py) — reads `SUPPLY_CHAIN_TRUST_API_KEY`
+- [Python SDK](./sdk/python/supply_chain_trust.py) — currently reads the legacy
+  compatibility variable `SUPPLY_CHAIN_TRUST_API_KEY`
 - [TypeScript SDK](./sdk/typescript/index.ts)
 
-Copy the file you need into your project. The OpenAPI document remains the
-authoritative operation and schema contract.
+The legacy filename and environment variable remain supported so existing
+integrations do not break; the public product name is Agent Supply Trust. The
+OpenAPI document is the authoritative operation and schema contract.
 
-## Authentication and errors
+## Collection scope
 
-API operations use `Authorization: Bearer <API_KEY>` (or `x-api-key` where
-documented). Dashboard-session operations and signed service webhooks are not
-callable with a customer API key. Public demo and health operations require no
-credential. Errors use a stable `error.code` plus a request ID for support.
+The runnable Postman collection includes the public demo, the no-key checkout
+path, key bootstrap, and API-key product operations. It intentionally excludes
+the provider-only billing webhook and browser-session subscription, invoice,
+and payment routes: those require a signed hub request or the dashboard's
+HttpOnly session and CSRF controls, and a bearer API key cannot run them. The
+OpenAPI document linked above remains the reference for those operations.
+
+## Authentication and troubleshooting
+
+- `401`: set `KEY` to the value returned once by `/v1/keys/claim`.
+- `400 invalid_request`: provide a supported `kind` plus non-empty `name` and
+  `version`; permissions must use the documented enum. A client-side schema
+  tool may label the same input problem `422` before send.
+- `429`: wait for `Retry-After` when present, then retry with backoff.
+
+Errors use a stable `error.code` and request ID. Share only the request ID with
+support, never private component instructions, an API key or claim token.
 
 ## Distribution attribution
 
-The key request above identifies this README with the stable tuple
-`github / developer / agent-supply-trust-github / readme`. The Postman collection and both
-SDKs carry their own source metadata. Attribution is used to compare qualified
-activation and retained use; it is not evidence that this channel already
-performs.
+The key request above uses the stable tuple
+`github / developer / agent-supply-trust-github / readme`. The Postman
+collection and SDKs carry their own source metadata. Attribution compares
+qualified activation and retained use; it does not claim that this channel
+already performs.
 
 ## License
 
